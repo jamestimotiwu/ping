@@ -1,0 +1,3 @@
+Buglog:
+
+1. Initially had an issue with "storage size addr is unknown" forgot to add proper libraries for hostnames

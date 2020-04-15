@@ -5,6 +5,8 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include <arpa/inet.h>
+
 int main(int argc, char** argv) {
 	int socket_fd;
 	char* command;
@@ -23,11 +25,12 @@ int main(int argc, char** argv) {
 		return 0;
 	
 	/* Populate socket address struct */
-	//addr->sin_family = host->h_addrtype;
-	//addr->sin_port = ;
-	//addr->sin_addr.s_addr = *(host->h_addr);
+	printf("%s\n", host->h_name);		
 
-	printf("%s", host->h_name);
-	
+	addr.sin_family = host->h_addrtype;
+	addr.sin_port = htons(0);
+	addr.sin_addr.s_addr = *(host->h_addr);
+
+	printf("%s\n", inet_ntoa(*(struct in_addr*)host->h_addr));
 
 }
