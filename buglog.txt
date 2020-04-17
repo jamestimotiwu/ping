@@ -1,3 +1,5 @@
 Buglog:
 
 1. Initially had an issue with "storage size addr is unknown" forgot to add proper libraries for hostnames
+
+2. Issues with opening socket; solution was to use sudo, only root may open raw sockets

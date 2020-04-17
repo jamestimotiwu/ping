@@ -27,7 +27,6 @@ int main(int argc, char** argv) {
 	struct hostent* host;
 	struct icmphdr icmp;
 
-	while(sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP) > -1);
 	/* Check if arg exists */
 	if (argc == 0) 
 		return 0;
@@ -42,15 +41,19 @@ int main(int argc, char** argv) {
 	/* Populate socket address struct */
 	printf("%s\n", host->h_name);		
 
+	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = host->h_addrtype;
 	addr.sin_port = htons(0);
-	addr.sin_addr.s_addr = *(host->h_addr);
+	addr.sin_addr.s_addr = *(long*)host->h_addr;
 
 	printf("%s\n", inet_ntoa(*(struct in_addr*)host->h_addr));
 
+	sock_fd = -1;
 	/* Open icmp socket fd*/
-
-	//if(sock_fd == -1)
+	while(sock_fd < 0) {
+		sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+		printf("%d\n", sock_fd);
+	}
 	//	fprintf(stderr, "%s\n", explain_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP));
 	printf("%d\n", sock_fd);
 	/* Prepare icmp */
@@ -61,18 +64,17 @@ int main(int argc, char** argv) {
 
 	/* Send echo request */
 	int rcv;
-	unsigned char data[2048]; //data buffer
+	unsigned char buf[256]; //data buffer
 
-	memcpy(data, &icmp, sizeof(icmp));
-	rcv = sendto(sock_fd, data, sizeof(icmp), 0,
-				(struct sockaddr*)&addr, sizeof(addr));
-
+	memcpy(buf, &icmp, sizeof(icmp));
+	while(rcv = sendto(sock_fd, buf, sizeof(icmp), 0,
+				(struct sockaddr*)&addr, sizeof(addr)) > -1);
 	printf("Val: %d\n", rcv);
 	/* Poll for packet */
 	int slen;
 	slen = 0;
 	while (1) {
-		rcv = recvfrom(sock_fd, data, sizeof(data), 0, NULL, &slen);
+		rcv = recvfrom(sock_fd, buf, sizeof(buf), 0, NULL, &slen);
 
 		//printf("%d", rcv);
 	}
