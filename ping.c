@@ -4,13 +4,14 @@
 #include <sys/types.h>
 
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <netdb.h>
 
 #include <arpa/inet.h>
 
 /* Debug */
-#include <libexplain/socket.h>
+//#include <libexplain/socket.h>
 /*
  *
  * send ICMP echo requests
@@ -26,6 +27,7 @@ int main(int argc, char** argv) {
 	struct hostent* host;
 	struct icmphdr icmp;
 
+	while(sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP) > -1);
 	/* Check if arg exists */
 	if (argc == 0) 
 		return 0;
@@ -47,10 +49,9 @@ int main(int argc, char** argv) {
 	printf("%s\n", inet_ntoa(*(struct in_addr*)host->h_addr));
 
 	/* Open icmp socket fd*/
-	sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
-	if(sock_fd == -1)
-		fprintf(stderr, "%s\n", explain_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP));
+	//if(sock_fd == -1)
+	//	fprintf(stderr, "%s\n", explain_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP));
 	printf("%d\n", sock_fd);
 	/* Prepare icmp */
 	int cnt;
