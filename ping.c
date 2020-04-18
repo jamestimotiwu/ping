@@ -12,6 +12,8 @@
 
 /* Debug */
 //#include <libexplain/socket.h>
+#include <errno.h>
+
 /*
  *
  * send ICMP echo requests
@@ -43,7 +45,7 @@ int main(int argc, char** argv) {
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = host->h_addrtype;
-	addr.sin_port = htons(0);
+	addr.sin_port = 0;
 	addr.sin_addr.s_addr = *(long*)host->h_addr;
 
 	printf("%s\n", inet_ntoa(*(struct in_addr*)host->h_addr));
@@ -66,16 +68,23 @@ int main(int argc, char** argv) {
 	int rcv;
 	unsigned char buf[256]; //data buffer
 
+	rcv = -1;
 	memcpy(buf, &icmp, sizeof(icmp));
-	while(rcv = sendto(sock_fd, buf, sizeof(icmp), 0,
-				(struct sockaddr*)&addr, sizeof(addr)) > -1);
+	while (rcv < 0) {
+		rcv = sendto(sock_fd, &buf, sizeof(icmp), 0,
+				(struct sockaddr*)&addr, sizeof(addr));
+		if (rcv == -1)
+			perror("");
+	}
 	printf("Val: %d\n", rcv);
 	/* Poll for packet */
 	int slen;
 	slen = 0;
 	while (1) {
 		rcv = recvfrom(sock_fd, buf, sizeof(buf), 0, NULL, &slen);
-
+		if(rcv == -1) {
+			perror("Err: ");
+		}
 		//printf("%d", rcv);
 	}
 
