@@ -11,12 +11,14 @@
 #include <arpa/inet.h>
 
 /* Debug */
-//#include <libexplain/socket.h>
 #include <errno.h>
 #include <fcntl.h>
 
 
 static unsigned short csum(unsigned short * data, int len);
+static int icmp_packet_create();
+static int icmp_sock_init();
+
 
 /*
  *
@@ -26,42 +28,30 @@ static unsigned short csum(unsigned short * data, int len);
  * report loss / rtt time
  */
 
-#define PACKETSIZE	64
-struct packet
-{
-	struct icmphdr hdr;
-	char msg[PACKETSIZE-sizeof(struct icmphdr)];
-};
-
-
 unsigned short csum(unsigned short * data, int len){
   int i;
   unsigned int sum = 0;
   unsigned short * ptr;
   unsigned short chcksum;
   
-  
   for(i=len, ptr=data; i > 1; i-=2){ //i-=2 for 2*8=16 bits at time
     sum += *ptr; //sum += 16 bit word at ptr
     ptr+=1;//move ptr to next 16 bit word
   }
-
   //check if we have an extra 8 bit word
   if (i == 1){
     sum += *((unsigned char*) ptr); //cast ptr to 8 bit unsigned char
   }
-
   //Fold the cary into the first 16 bits
   sum = (sum & 0xffff) + (sum >> 16);
-
   //Fold the last cary into the sum
   sum += (sum >> 16);
-
   // ~ compliments and return
   chcksum = ~sum;
   
   return chcksum;
 }
+
 int icmp_packet_create(){
 	return 0;
 }
@@ -85,73 +75,86 @@ int icmp_sock_init() {
 	return fd;
 }
 
+int host_to_addr(const char* hostname, struct sockaddr_in* addr) {
+	struct hostent* host;
+	host = gethostbyname(hostname);
+
+	if (host == NULL)
+		return -1;
+	
+	/* Populate socket address struct */
+	printf("%s\n", host->h_name);		
+
+	memset(addr, 0, sizeof(*addr));
+	addr->sin_family = host->h_addrtype;
+	addr->sin_port = 0;
+	addr->sin_addr.s_addr = *(long*)host->h_addr;
+	return 0;
+}
+
 int main(int argc, char** argv) {
+	int cnt;
 	int sock_fd;
+	int nbytes;
+	int slen;
+	long double rrt;
+
 	char* command;
 	struct sockaddr_in addr;
-	struct hostent* host;
-	//unsigned char buf[64];
-	//struct icmphdr icmp;
-
-	int i, cnt=1;
-	struct packet pckt;
-	int slen;
+	struct icmphdr pckt;
+	struct timespec start, end;
 	slen = sizeof(addr);
+
 	/* Check arg buf */
 	if (argc == 0) 
 		return 0;
 
 	/* Read / parse args and dns lookup */
 	command = argv[1];
-	host = gethostbyname(command);
-
-	if (host == NULL)
+	if (host_to_addr(command, &addr) == -1)
 		return 0;
-	
-	/* Populate socket address struct */
-	printf("%s\n", host->h_name);		
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = host->h_addrtype;
-	addr.sin_port = 0;
-	addr.sin_addr.s_addr = *(long*)host->h_addr;
-
-	printf("%s\n", inet_ntoa(*(struct in_addr*)host->h_addr));
-
+	printf("Pinging (%s) %d bytes of data. \n", inet_ntoa(addr.sin_addr), nbytes);
 	/* Open icmp socket fd*/
 	sock_fd = icmp_sock_init();
+	
 	/* Send echo request */
-	int rcv;
-	rcv = -1;
-	unsigned char data_recv[256];
+	nbytes = -1;
+	cnt = 1;
 	while(1) {
 		/* Prepare header*/
 		bzero(&pckt, sizeof(pckt));
-		pckt.hdr.type = ICMP_ECHO;
-		pckt.hdr.un.echo.id = 1;
-		pckt.msg[i] = 0;
-		pckt.hdr.un.echo.sequence = cnt++;
-		pckt.hdr.checksum = csum((unsigned short*)&pckt, sizeof(pckt));
-			
-		rcv = -1;
-		rcv = sendto(sock_fd, 
+		pckt.type = ICMP_ECHO;
+		pckt.un.echo.id = 1;
+		pckt.un.echo.sequence = cnt++;
+		pckt.checksum = csum((unsigned short*)&pckt, sizeof(pckt));
+
+		/* Use monotonic time for linearity */
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		nbytes = sendto(sock_fd, 
 					&pckt, 
 					sizeof(pckt), 
 					0,
 					(struct sockaddr*)&addr, 
 					sizeof(addr));
-		if (rcv == -1)
+		if (nbytes == -1)
 			perror("sendto");
-		printf("Rcv: %d", rcv);
-		rcv = recvfrom(sock_fd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&addr, &slen);
-		if (rcv == -1) {
+		//printf("Pinging (%s) %d bytes of data. \n", inet_ntoa(addr.sin_addr), nbytes);
+		nbytes = recvfrom(sock_fd,
+					&pckt, 
+					sizeof(pckt), 
+					0, 
+					(struct sockaddr*)&addr, 
+					&slen);
+		if (nbytes == -1) {
 			perror("rcv");
 		} else {
-			printf("\nrecieved %s\n", inet_ntoa(addr.sin_addr));
+			clock_gettime(CLOCK_MONOTONIC, &end);
+			rrt = (end.tv_sec - start.tv_sec) * 1000.0 + ((double)(end.tv_nsec - start.tv_nsec)) / 100000.0;
+			printf("\nRecieved %d bytes from %s in rrt=%Lf ms\n", nbytes, inet_ntoa(addr.sin_addr), rrt);
 		}
 		sleep(1);
 	}
-while (1);
 }
 
 
