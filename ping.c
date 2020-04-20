@@ -2,6 +2,8 @@
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <string.h>
+#include <unistd.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -21,41 +23,37 @@ static int icmp_sock_init();
 
 
 /*
- *
  * send ICMP echo requests
  * recieve echo reply
- *
  * report loss / rtt time
  */
 
 unsigned short csum(unsigned short * data, int len){
   int i;
   unsigned int sum = 0;
-  unsigned short * ptr;
-  unsigned short chcksum;
+  unsigned short *ptr;
+  unsigned short checksum;
   
-  for(i=len, ptr=data; i > 1; i-=2){ //i-=2 for 2*8=16 bits at time
-    sum += *ptr; //sum += 16 bit word at ptr
-    ptr+=1;//move ptr to next 16 bit word
+  for(i=len, ptr=data; i > 1; i-=2){ 
+    sum += *ptr; 
+    ptr+=1;
   }
-  //check if we have an extra 8 bit word
   if (i == 1){
-    sum += *((unsigned char*) ptr); //cast ptr to 8 bit unsigned char
+    sum += *((unsigned char*) ptr); 
   }
-  //Fold the cary into the first 16 bits
   sum = (sum & 0xffff) + (sum >> 16);
-  //Fold the last cary into the sum
   sum += (sum >> 16);
-  // ~ compliments and return
-  chcksum = ~sum;
+  checksum = ~sum;
   
-  return chcksum;
+  return checksum;
 }
 
-int icmp_packet_create(){
-	return 0;
-}
-
+/*
+ * setup icmp socket
+ * Input: None
+ * Output: fd - file descriptor
+ * Side effect: Set up file descriptor
+ */
 int icmp_sock_init() {
 	int fd;
 	const int val=255;
@@ -63,7 +61,6 @@ int icmp_sock_init() {
 	fd = -1;
 	while (fd < 0) {
 		fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-		perror("sock_fd");
 	}
 	/* Configure socket blocking and TLL */
 	if (setsockopt(fd, SOL_IP, IP_TTL, &val, sizeof(val)) != 0)
@@ -75,6 +72,13 @@ int icmp_sock_init() {
 	return fd;
 }
 
+/*
+ * setup icmp socket
+ * Input: hostname - hostname in string
+ *		  addr - pointer to address struct
+ * Output: 0 if success, -1 if fail
+ * Side effect: modify addr structure given hostname
+ */
 int host_to_addr(const char* hostname, struct sockaddr_in* addr) {
 	struct hostent* host;
 	host = gethostbyname(hostname);
@@ -94,6 +98,7 @@ int host_to_addr(const char* hostname, struct sockaddr_in* addr) {
 
 int main(int argc, char** argv) {
 	int cnt;
+	int recieved;
 	int sock_fd;
 	int nbytes;
 	int slen;
@@ -106,15 +111,16 @@ int main(int argc, char** argv) {
 	slen = sizeof(addr);
 
 	/* Check arg buf */
-	if (argc == 0) 
+	if (argc == 0) { 
+		printf("No arguments given. Usage: ping <hostname>");
 		return 0;
-
+	}
 	/* Read / parse args and dns lookup */
 	command = argv[1];
 	if (host_to_addr(command, &addr) == -1)
 		return 0;
 
-	printf("Pinging (%s) %d bytes of data. \n", inet_ntoa(addr.sin_addr), nbytes);
+	printf("Pinging (%s) %ld bytes of data. \n", inet_ntoa(addr.sin_addr), sizeof(pckt));
 	/* Open icmp socket fd*/
 	sock_fd = icmp_sock_init();
 	
@@ -123,7 +129,7 @@ int main(int argc, char** argv) {
 	cnt = 1;
 	while(1) {
 		/* Prepare header*/
-		bzero(&pckt, sizeof(pckt));
+		memset(&pckt, 0, sizeof(pckt));
 		pckt.type = ICMP_ECHO;
 		pckt.un.echo.id = 1;
 		pckt.un.echo.sequence = cnt++;
@@ -131,26 +137,21 @@ int main(int argc, char** argv) {
 
 		/* Use monotonic time for linearity */
 		clock_gettime(CLOCK_MONOTONIC, &start);
-		nbytes = sendto(sock_fd, 
-					&pckt, 
-					sizeof(pckt), 
-					0,
-					(struct sockaddr*)&addr, 
-					sizeof(addr));
+		nbytes = sendto(sock_fd, &pckt, sizeof(pckt), 0,(struct sockaddr*)&addr, sizeof(addr));
 		if (nbytes == -1)
 			perror("sendto");
-		//printf("Pinging (%s) %d bytes of data. \n", inet_ntoa(addr.sin_addr), nbytes);
-		nbytes = recvfrom(sock_fd,
-					&pckt, 
-					sizeof(pckt), 
-					0, 
-					(struct sockaddr*)&addr, 
-					&slen);
+		nbytes = recvfrom(sock_fd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&addr, &slen);
 		if (nbytes >= 0) {
 			clock_gettime(CLOCK_MONOTONIC, &end);
 			rrt = (end.tv_sec - start.tv_sec) * 1000.0 + ((double)(end.tv_nsec - start.tv_nsec)) / 100000.0;
-			printf("\nRecieved %d bytes from %s in rrt=%Lf ms\n", nbytes, inet_ntoa(addr.sin_addr), rrt);
+			recieved++;
+			printf("%d bytes from %s: rrt=%Lf ms\n", nbytes, inet_ntoa(addr.sin_addr), rrt);
+		} else {
+			if (cnt <= 1)
+				printf("Packet dropped.\n");
 		}
+
+		//delay
 		sleep(1);
 	}
 }
