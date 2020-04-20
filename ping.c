@@ -26,19 +26,28 @@ static unsigned short csum(unsigned short * data, int len);
  * report loss / rtt time
  */
 
-struct header {
+#define PACKETSIZE	64
+struct packet
+{
 	struct icmphdr hdr;
-	char msg[64 - sizeof(struct icmphdr)];
+	char msg[PACKETSIZE-sizeof(struct icmphdr)];
 };
+
+int pid=-1;
 
 int main(int argc, char** argv) {
 	int sock_fd;
 	char* command;
 	struct sockaddr_in addr;
 	struct hostent* host;
-	unsigned char buf[64];
+	//unsigned char buf[64];
 	//struct icmphdr icmp;
 
+	const int val=255;
+	int i, cnt=1;
+	int cnt2;
+	struct packet pckt;
+	struct sockaddr_in r_addr;
 	/* Check if arg exists */
 	if (argc == 0) 
 		return 0;
@@ -64,66 +73,78 @@ int main(int argc, char** argv) {
 	/* Open icmp socket fd*/
 	while(sock_fd < 0) {
 		sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-		printf("%d\n", sock_fd);
+		perror("sock_fd");
 	}
-	struct icmp* icmp;
-	icmp = (struct icmp*) buf;
-	icmp->icmp_type = ICMP_ECHO;
-	icmp->icmp_code =0;
-	icmp->icmp_id = 42;
-	icmp->icmp_seq = 0;
-	icmp->icmp_cksum = 0;
-
-	icmp->icmp_cksum = csum((unsigned short*) icmp, sizeof(struct icmp));
-
-	const int val = 255;
+	//const int val = 255;
 	if (setsockopt(sock_fd, SOL_IP, IP_TTL, &val, sizeof(val)) != 0)
 		perror("TTL option");
 	/* Non-block socket for recvfrom */
 	if ( fcntl(sock_fd, F_SETFL, O_NONBLOCK) != 0)
 		perror("Request nonblocking");
 
+	bzero(&pckt, sizeof(pckt));
+	pckt.hdr.type = ICMP_ECHO;
+	pckt.hdr.un.echo.id = 1;
+	for ( i = 0; i < sizeof(pckt.msg)-1; i++ )
+		pckt.msg[i] = i+'0';
+	pckt.msg[i] = 0;
+	pckt.hdr.un.echo.sequence = cnt++;
+	pckt.hdr.checksum = csum((unsigned short*)&pckt, sizeof(pckt));
+
 	/* Prepare header*/
-	int cnt = 0;
-	/* Prepare icmp */
-	//int cnt;
-	//cnt = 0;
-	//icmp.type = ICMP_ECHO;
-	//icmp.un.echo.sequence = cnt++;
-	//icmp.un.echo.id = 1;
-	unsigned short checksum;
-	checksum = csum((unsigned short*)&icmp, sizeof(struct icmp));
 	/* Send echo request */
 	int rcv;
 	rcv = -1;
 	//memcpy(buf, &icmp, sizeof(icmp));
-	while (rcv < 0) {
-		rcv = sendto(sock_fd, &buf, sizeof(buf), 0,
-				(struct sockaddr*)&addr, sizeof(addr));
-		if (rcv == -1)
-			perror("sendto");
-	}
-	
-	printf("test");
-	printf("Val: %d\n", rcv);
-	/* Poll for packet */
+	unsigned char data_recv[256];
 	int slen;
 	slen = sizeof(addr);
-	printf("Test");
-
-	unsigned char data_recv[256];
-	struct sockaddr_in r_addr;
-	slen = sizeof(r_addr);
+	while(1) {
+		bzero(&pckt, sizeof(pckt));
+		pckt.hdr.type = ICMP_ECHO;
+		pckt.hdr.un.echo.id = 1;
+		for ( i = 0; i < sizeof(pckt.msg)-1; i++ )
+			pckt.msg[i] = i+'0';
+		pckt.msg[i] = 0;
+		pckt.hdr.un.echo.sequence = cnt++;
+		pckt.hdr.checksum = csum((unsigned short*)&pckt, sizeof(pckt));
+			
+		rcv = -1;
+		rcv = sendto(sock_fd, 
+					&pckt, 
+					sizeof(pckt), 
+					0,
+					(struct sockaddr*)&addr, 
+					sizeof(addr));
+		if (rcv == -1)
+			perror("sendto");
+		printf("Rcv: %d", rcv);
+		rcv = recvfrom(sock_fd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &slen);
+		if (rcv == -1) {
+			perror("rcv");
+		} else {
+			printf("\nrecieved %s\n", inet_ntoa(r_addr.sin_addr));
+		}
+		sleep(1);
+	}
+	//struct sockaddr_in r_addr;
+	//slen = sizeof(r_addr);
 
 	//rcv = recvfrom(sock_fd, data_recv, sizeof(data_recv), 0, (struct sockaddr*)&addr, &slen);
-	printf("recv: %d\n", rcv);
-	rcv = -1;
+	//printf("recv: %d\n", rcv);
+	//rcv = -1;
+	/*
 	while (rcv < 0) {
-		rcv = recvfrom(sock_fd, data_recv, sizeof(data_recv), 0, (struct sockaddr*)&r_addr, &slen);
+		rcv = recvfrom(sock_fd, 
+					data_recv, 
+					sizeof(data_recv), 
+					0, 
+					(struct sockaddr*)&addr,
+					&slen);
 		if(rcv == -1) {
 			perror("recvfrom");
 		}
-	}
+	}*/
 	printf("recv: %d\n", rcv);
 while (1);
 }

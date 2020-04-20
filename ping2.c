@@ -137,8 +137,8 @@ void ping(struct sockaddr_in *addr)
 	{	int len=sizeof(r_addr);
 
 		printf("Msg #%d\n", cnt);
-		if ( recvfrom(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &len) > 0 )
-			printf("***Got message!***\n");
+		//if ( recvfrom(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &len) > 0 )
+			//printf("***Got message!***\n");
 		bzero(&pckt, sizeof(pckt));
 		pckt.hdr.type = ICMP_ECHO;
 		pckt.hdr.un.echo.id = pid;
@@ -162,6 +162,10 @@ void ping(struct sockaddr_in *addr)
 
 		if ( sendto(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)addr, sizeof(*addr)) <= 0 )
 			perror("sendto");
+		
+		if ( recvfrom(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &len) <= 0 )
+			perror("recvfrom");
+			//printf("***Got message!*** from");
 		sleep(1);
 	}
 }
