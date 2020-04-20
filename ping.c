@@ -14,6 +14,10 @@
 //#include <libexplain/socket.h>
 #include <errno.h>
 #include <fcntl.h>
+
+
+static unsigned short csum(unsigned short * data, int len);
+
 /*
  *
  * send ICMP echo requests
@@ -32,7 +36,8 @@ int main(int argc, char** argv) {
 	char* command;
 	struct sockaddr_in addr;
 	struct hostent* host;
-	struct icmphdr icmp;
+	unsigned char buf[64];
+	//struct icmphdr icmp;
 
 	/* Check if arg exists */
 	if (argc == 0) 
@@ -60,54 +65,95 @@ int main(int argc, char** argv) {
 	while(sock_fd < 0) {
 		sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 		printf("%d\n", sock_fd);
-		exit(1);
 	}
-	printf("%d\n", sock_fd);
+	struct icmp* icmp;
+	icmp = (struct icmp*) buf;
+	icmp->icmp_type = ICMP_ECHO;
+	icmp->icmp_code =0;
+	icmp->icmp_id = 42;
+	icmp->icmp_seq = 0;
+	icmp->icmp_cksum = 0;
 
-	/* Setup socket*/
+	icmp->icmp_cksum = csum((unsigned short*) icmp, sizeof(struct icmp));
+
 	const int val = 255;
 	if (setsockopt(sock_fd, SOL_IP, IP_TTL, &val, sizeof(val)) != 0)
 		perror("TTL option");
+	/* Non-block socket for recvfrom */
 	if ( fcntl(sock_fd, F_SETFL, O_NONBLOCK) != 0)
-		perror("Request nonblocking i/o");
+		perror("Request nonblocking");
 
 	/* Prepare header*/
 	int cnt = 0;
-	struct header buffer;
-	buffer.hdr.un.echo.sequence = cnt++;
-	buffer.hdr.type = ICMP_ECHO;
-	memset(buffer.msg, 0, sizeof(buffer.msg));
-
 	/* Prepare icmp */
 	//int cnt;
 	//cnt = 0;
-
-	icmp.type = ICMP_ECHO;
+	//icmp.type = ICMP_ECHO;
 	//icmp.un.echo.sequence = cnt++;
-
+	//icmp.un.echo.id = 1;
+	unsigned short checksum;
+	checksum = csum((unsigned short*)&icmp, sizeof(struct icmp));
 	/* Send echo request */
 	int rcv;
-	unsigned char buf[64]; //data buffer
-	bzero(buf, sizeof(buf));
 	rcv = -1;
-	memcpy(buf, &icmp, sizeof(icmp));
+	//memcpy(buf, &icmp, sizeof(icmp));
 	while (rcv < 0) {
-		rcv = sendto(sock_fd, &buffer, sizeof(buffer), 0,
+		rcv = sendto(sock_fd, &buf, sizeof(buf), 0,
 				(struct sockaddr*)&addr, sizeof(addr));
 		if (rcv == -1)
 			perror("sendto");
 	}
+	
+	printf("test");
 	printf("Val: %d\n", rcv);
 	/* Poll for packet */
 	int slen;
-	slen = 0;
-	while (1) {
-		rcv = recvfrom(sock_fd, buf, sizeof(buf), 0, NULL, &slen);
-		if(rcv == -1) {
-			perror("Err: ");
-		}
-		//printf("%d", rcv);
-	}
+	slen = sizeof(addr);
+	printf("Test");
 
-	while (1);
+	unsigned char data_recv[256];
+	struct sockaddr_in r_addr;
+	slen = sizeof(r_addr);
+
+	//rcv = recvfrom(sock_fd, data_recv, sizeof(data_recv), 0, (struct sockaddr*)&addr, &slen);
+	printf("recv: %d\n", rcv);
+	rcv = -1;
+	while (rcv < 0) {
+		rcv = recvfrom(sock_fd, data_recv, sizeof(data_recv), 0, (struct sockaddr*)&r_addr, &slen);
+		if(rcv == -1) {
+			perror("recvfrom");
+		}
+	}
+	printf("recv: %d\n", rcv);
+while (1);
+}
+
+
+unsigned short csum(unsigned short * data, int len){
+  int i;
+  unsigned int sum = 0;
+  unsigned short * ptr;
+  unsigned short chcksum;
+  
+  
+  for(i=len, ptr=data; i > 1; i-=2){ //i-=2 for 2*8=16 bits at time
+    sum += *ptr; //sum += 16 bit word at ptr
+    ptr+=1;//move ptr to next 16 bit word
+  }
+
+  //check if we have an extra 8 bit word
+  if (i == 1){
+    sum += *((unsigned char*) ptr); //cast ptr to 8 bit unsigned char
+  }
+
+  //Fold the cary into the first 16 bits
+  sum = (sum & 0xffff) + (sum >> 16);
+
+  //Fold the last cary into the sum
+  sum += (sum >> 16);
+
+  // ~ compliments and return
+  chcksum = ~sum;
+  
+  return chcksum;
 }
