@@ -17,35 +17,33 @@
 #include <fcntl.h>
 
 
-static unsigned short csum(unsigned short * data, int len);
-static int icmp_packet_create();
+static unsigned short csum(unsigned short* data, int len);
 static int icmp_sock_init();
-
+static int host_to_addr(const char* hostname, struct sockaddr_in* addr);
 
 /*
  * send ICMP echo requests
  * recieve echo reply
  * report loss / rtt time
  */
-
-unsigned short csum(unsigned short * data, int len){
-  int i;
-  unsigned int sum = 0;
-  unsigned short *ptr;
-  unsigned short checksum;
+unsigned short csum(unsigned short* data, int len){
+	int i;
+	unsigned int sum = 0;
+	unsigned short *ptr;
+	unsigned short checksum;
   
-  for(i=len, ptr=data; i > 1; i-=2){ 
-    sum += *ptr; 
-    ptr+=1;
-  }
-  if (i == 1){
-    sum += *((unsigned char*) ptr); 
-  }
-  sum = (sum & 0xffff) + (sum >> 16);
-  sum += (sum >> 16);
-  checksum = ~sum;
+	for(i=len, ptr=data; i > 1; i-=2){ 
+		sum += *ptr; 
+		ptr+=1;
+	}
+	if (i == 1){
+		sum += *((unsigned char*) ptr); 
+	}
+	sum = (sum & 0xffff) + (sum >> 16);
+	sum += (sum >> 16);
+	checksum = ~sum;
   
-  return checksum;
+	return checksum;
 }
 
 /*
@@ -87,8 +85,6 @@ int host_to_addr(const char* hostname, struct sockaddr_in* addr) {
 		return -1;
 	
 	/* Populate socket address struct */
-	printf("%s\n", host->h_name);		
-
 	memset(addr, 0, sizeof(*addr));
 	addr->sin_family = host->h_addrtype;
 	addr->sin_port = 0;
@@ -102,7 +98,8 @@ int main(int argc, char** argv) {
 	int sock_fd;
 	int nbytes;
 	int slen;
-	long double rrt;
+	double rrt;
+	double loss;
 
 	char* command;
 	struct sockaddr_in addr;
@@ -111,8 +108,8 @@ int main(int argc, char** argv) {
 	slen = sizeof(addr);
 
 	/* Check arg buf */
-	if (argc == 0) { 
-		printf("No arguments given. Usage: ping <hostname>");
+	if (argc == 1) { 
+		printf("No arguments given. Usage: ping <hostname or ip>\n");
 		return 0;
 	}
 	/* Read / parse args and dns lookup */
@@ -127,6 +124,7 @@ int main(int argc, char** argv) {
 	/* Send echo request */
 	nbytes = -1;
 	cnt = 1;
+	recieved = 1;
 	while(1) {
 		/* Prepare header*/
 		memset(&pckt, 0, sizeof(pckt));
@@ -145,8 +143,10 @@ int main(int argc, char** argv) {
 			clock_gettime(CLOCK_MONOTONIC, &end);
 			rrt = (end.tv_sec - start.tv_sec) * 1000.0 + ((double)(end.tv_nsec - start.tv_nsec)) / 100000.0;
 			recieved++;
-			printf("%d bytes from %s: rrt=%Lf ms\n", nbytes, inet_ntoa(addr.sin_addr), rrt);
+			loss = ((double)(cnt - recieved)/(double)cnt);
+			printf("%d bytes from %s: rrt=%f ms, loss=%f\n", nbytes, inet_ntoa(addr.sin_addr), rrt, loss);
 		} else {
+			recieved++;
 			if (cnt <= 1)
 				printf("Packet dropped.\n");
 		}
