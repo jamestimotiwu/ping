@@ -121,6 +121,8 @@ void ping(struct sockaddr_in *addr)
 	struct packet pckt;
 	struct sockaddr_in r_addr;
 
+	int cnt2 = 1;
+
 	sd = socket(PF_INET, SOCK_RAW, proto->p_proto);
 	if ( sd < 0 )
 	{
@@ -145,6 +147,19 @@ void ping(struct sockaddr_in *addr)
 		pckt.msg[i] = 0;
 		pckt.hdr.un.echo.sequence = cnt++;
 		pckt.hdr.checksum = checksum(&pckt, sizeof(pckt));
+
+
+		/* Test send buffer */
+		struct icmphdr icmp;
+		char buf[64];
+		icmp.type = ICMP_ECHO;
+		icmp.un.echo.id = pid;
+		icmp.un.echo.sequence = cnt2++;
+		memcpy(buf, &icmp, sizeof(icmp));
+
+		//if ( sendto(sd, buf, sizeof(buf), 0, (struct sockaddr*)addr, sizeof(*addr)) <= 0 )
+			//perror("sendto");
+
 		if ( sendto(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)addr, sizeof(*addr)) <= 0 )
 			perror("sendto");
 		sleep(1);

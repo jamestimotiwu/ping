@@ -13,7 +13,7 @@
 /* Debug */
 //#include <libexplain/socket.h>
 #include <errno.h>
-
+#include <fcntl.h>
 /*
  *
  * send ICMP echo requests
@@ -21,6 +21,11 @@
  *
  * report loss / rtt time
  */
+
+struct header {
+	struct icmphdr hdr;
+	char msg[64 - sizeof(struct icmphdr)];
+};
 
 int main(int argc, char** argv) {
 	int sock_fd;
@@ -55,26 +60,42 @@ int main(int argc, char** argv) {
 	while(sock_fd < 0) {
 		sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 		printf("%d\n", sock_fd);
+		exit(1);
 	}
-	//	fprintf(stderr, "%s\n", explain_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP));
 	printf("%d\n", sock_fd);
+
+	/* Setup socket*/
+	const int val = 255;
+	if (setsockopt(sock_fd, SOL_IP, IP_TTL, &val, sizeof(val)) != 0)
+		perror("TTL option");
+	if ( fcntl(sock_fd, F_SETFL, O_NONBLOCK) != 0)
+		perror("Request nonblocking i/o");
+
+	/* Prepare header*/
+	int cnt = 0;
+	struct header buffer;
+	buffer.hdr.un.echo.sequence = cnt++;
+	buffer.hdr.type = ICMP_ECHO;
+	memset(buffer.msg, 0, sizeof(buffer.msg));
+
 	/* Prepare icmp */
-	int cnt;
-	cnt = 0;
+	//int cnt;
+	//cnt = 0;
+
 	icmp.type = ICMP_ECHO;
-	icmp.un.echo.sequence = cnt++;
+	//icmp.un.echo.sequence = cnt++;
 
 	/* Send echo request */
 	int rcv;
-	unsigned char buf[256]; //data buffer
-
+	unsigned char buf[64]; //data buffer
+	bzero(buf, sizeof(buf));
 	rcv = -1;
 	memcpy(buf, &icmp, sizeof(icmp));
 	while (rcv < 0) {
-		rcv = sendto(sock_fd, &buf, sizeof(icmp), 0,
+		rcv = sendto(sock_fd, &buffer, sizeof(buffer), 0,
 				(struct sockaddr*)&addr, sizeof(addr));
 		if (rcv == -1)
-			perror("");
+			perror("sendto");
 	}
 	printf("Val: %d\n", rcv);
 	/* Poll for packet */
