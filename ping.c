@@ -146,9 +146,7 @@ int main(int argc, char** argv) {
 					0, 
 					(struct sockaddr*)&addr, 
 					&slen);
-		if (nbytes == -1) {
-			perror("rcv");
-		} else {
+		if (nbytes >= 0) {
 			clock_gettime(CLOCK_MONOTONIC, &end);
 			rrt = (end.tv_sec - start.tv_sec) * 1000.0 + ((double)(end.tv_nsec - start.tv_nsec)) / 100000.0;
 			printf("\nRecieved %d bytes from %s in rrt=%Lf ms\n", nbytes, inet_ntoa(addr.sin_addr), rrt);
